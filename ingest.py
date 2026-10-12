@@ -31,6 +31,16 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 DATE_COLORS = ("#767676", "gray", "#666666")
 DATE_PATTERN = re.compile(r"^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),\s")
 
+# Passwords written into notes, e.g. "Pw: abc", "pwd=abc;", "/pass=abc",
+# "user/Pw for FTP: name / abc", "user id=abc;password=abc", "PSK: abc". The label is kept
+# and the value becomes [REDACTED], so it never reaches chunks.json or Foundry.
+# A lone "Password:" prompt (nothing after it) is left alone.
+SECRET_PATTERN = re.compile(
+    r"(?i)(\b(?:passwords?|passwd|pwd|pw|pass|passcode|psk|pre-?shared key|api[_ -]?key|client[_ -]?secret|secret|token|user id|uid)\b"
+    r"[^:=\n]{0,20}?[:=][ \t]*)"            # label, up to 20 chars of filler, then ':' or '='
+    r"[^\s;|\"']+(?:[ \t]*/[ \t]*[^\s;|\"']+)?"  # the value, or a "user / password" pair
+)
+
 # The HTML elements we treat as one "block" of text, in document order.
 # <tr> is a table row: we join its cells with " | " so tables stay readable.
 BLOCK_TAGS = ["p", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6"]
@@ -68,6 +78,11 @@ def read_html_parts(mht_path):
 def clean(text):
     """Collapse runs of spaces, tabs, newlines and &nbsp; into single spaces."""
     return " ".join(text.split())
+
+
+def redact(text):
+    """Replace password-like values with [REDACTED]. Returns (text, how many)."""
+    return SECRET_PATTERN.subn(r"\1[REDACTED]", text)
 
 
 def is_grey(element):
@@ -176,6 +191,24 @@ def ingest(mht_path, target_words=400, max_words=500):
         fallback = clean(title_tag.get_text()) if title_tag else mht_path.stem
         pages += split_into_pages(soup, fallback)
 
+    # OneNote sometimes exports the same page twice; keep the first copy.
+    unique, seen = [], set()
+    for page in pages:
+        key = (page["title"], page["date"], tuple(page["paragraphs"]))
+        if key not in seen:
+            seen.add(key)
+            unique.append(page)
+    duplicates = len(pages) - len(unique)
+    pages = unique
+
+    redacted = 0
+    for page in pages:
+        page["title"], n = redact(page["title"])
+        redacted += n
+        for i, para in enumerate(page["paragraphs"]):
+            page["paragraphs"][i], n = redact(para)
+            redacted += n
+
     chunks = []
     for page in pages:
         for i, text in enumerate(chunk_paragraphs(page["paragraphs"], target_words, max_words)):
@@ -188,7 +221,7 @@ def ingest(mht_path, target_words=400, max_words=500):
                 "word_count": len(text.split()),
                 "text": text,
             })
-    return pages, chunks
+    return pages, chunks, duplicates, redacted
 
 
 def main():
@@ -200,7 +233,7 @@ def main():
     parser.add_argument("--show", type=int, default=3, help="how many chunks to print as samples")
     args = parser.parse_args()
 
-    pages, chunks = ingest(args.mht_file, args.target_words, args.max_words)
+    pages, chunks, duplicates, redacted = ingest(args.mht_file, args.target_words, args.max_words)
 
     with open(args.out, "w", encoding="utf-8") as f:
         json.dump(chunks, f, indent=2, ensure_ascii=False)
@@ -211,7 +244,8 @@ def main():
     for page in pages:
         words = sum(len(p.split()) for p in page["paragraphs"])
         print(f"  - {page['title'][:60]!r}  ({words} words, {page['date'] or 'no date'})")
-    print(f"\nWrote {len(chunks)} chunks to {args.out}\n")
+    print(f"\nSkipped {duplicates} duplicate pages. Redacted {redacted} password-like values.")
+    print(f"Wrote {len(chunks)} chunks to {args.out}\n")
 
     for chunk in chunks[:args.show]:
         preview = chunk["text"][:300].replace("\n", " ")

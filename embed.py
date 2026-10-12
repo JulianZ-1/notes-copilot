@@ -26,6 +26,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 import numpy as np
 
@@ -62,24 +63,70 @@ class FoundryEmbedder:
         from openai import AzureOpenAI
 
         load_dotenv()  # reads .env into environment variables
-        missing = [name for name in ("AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_API_KEY",
-                                     "AZURE_OPENAI_EMBEDDING_DEPLOYMENT")
-                   if not os.getenv(name)]
-        if missing:
-            sys.exit(f"Missing in .env: {', '.join(missing)}. Copy .env.example to .env and fill it in.")
+
+        endpoint = os.getenv("AZURE_OPENAI_ENDPOINT", "").strip()
+        key = os.getenv("AZURE_OPENAI_API_KEY", "").strip()
+        deployment = os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT", "").strip()
+
+        # Foundry's "Target URI" is the full address, e.g.
+        # https://x.openai.azure.com/openai/deployments/my-embed/embeddings?api-version=...
+        # The client wants only https://x.openai.azure.com/, and the deployment
+        # name is in the path, so either form can be pasted into .env.
+        url = urlparse(endpoint)
+        in_path = re.search(r"/deployments/([^/?]+)", url.path)
+        if in_path:
+            deployment = in_path.group(1)
+        if url.scheme and url.netloc:
+            endpoint = f"{url.scheme}://{url.netloc}/"
+
+        problems = []
+        if not endpoint or "your-resource" in endpoint:
+            problems.append("AZURE_OPENAI_ENDPOINT (paste the Target URI or endpoint from Foundry)")
+        elif not url.scheme.startswith("http"):
+            problems.append(f"AZURE_OPENAI_ENDPOINT should start with https://, got {endpoint!r}")
+        if not key or key.startswith("paste-"):
+            problems.append("AZURE_OPENAI_API_KEY (paste Key 1 from Foundry)")
+        if not deployment:
+            problems.append("AZURE_OPENAI_EMBEDDING_DEPLOYMENT (the name you gave your embedding deployment)")
+        if problems:
+            sys.exit("Fill these in in .env (copy .env.example to .env first if you haven't):\n  - "
+                     + "\n  - ".join(problems))
 
         self.client = AzureOpenAI(
-            azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
-            api_key=os.environ["AZURE_OPENAI_API_KEY"],
-            api_version=os.getenv("AZURE_OPENAI_API_VERSION", "2024-10-21"),
+            azure_endpoint=endpoint,
+            api_key=key,
+            api_version=os.getenv("AZURE_OPENAI_API_VERSION", "").strip() or "2024-10-21",
             max_retries=5,  # waits and retries automatically if you hit a rate limit
         )
+        self.endpoint = endpoint
         # In Azure you call a model by the *deployment name* you gave it.
-        self.deployment = os.environ["AZURE_OPENAI_EMBEDDING_DEPLOYMENT"]
+        self.deployment = deployment
         self.name = f"foundry:{self.deployment}"
 
     def embed(self, texts):
-        response = self.client.embeddings.create(model=self.deployment, input=texts)
+        import openai
+
+        # Turn the usual setup mistakes into a plain-English message instead of a traceback.
+        try:
+            response = self.client.embeddings.create(model=self.deployment, input=texts)
+        except openai.AuthenticationError as e:
+            sys.exit(f"Foundry rejected the key (401). Check AZURE_OPENAI_API_KEY in .env is Key 1 "
+                     f"of the same resource as the endpoint ({self.endpoint}).\n"
+                     f"If the key is right, your organisation may have key login turned off: ask for "
+                     f"Entra ID access.\nDetails: {e}")
+        except openai.PermissionDeniedError as e:
+            sys.exit(f"Foundry refused access (403). Key login may be turned off on this resource, "
+                     f"or its network rules block your PC/VPN.\nDetails: {e}")
+        except openai.NotFoundError as e:
+            sys.exit(f"No deployment named {self.deployment!r} at {self.endpoint} (404). Check "
+                     f"AZURE_OPENAI_EMBEDDING_DEPLOYMENT is the deployment *name* shown in Foundry, "
+                     f"and that the endpoint is from the same resource.\nDetails: {e}")
+        except openai.BadRequestError as e:
+            sys.exit(f"Foundry didn't accept the request (400). Make sure {self.deployment!r} is an "
+                     f"embedding model (e.g. text-embedding-3-small), not a chat model.\nDetails: {e}")
+        except openai.APIConnectionError as e:
+            sys.exit(f"Couldn't reach {self.endpoint}. Check the endpoint URL, and your network, "
+                     f"VPN or proxy.\nDetails: {e}")
         # The response holds one item per input text, in the same order.
         return np.array([item.embedding for item in response.data], dtype=np.float32)
 

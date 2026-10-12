@@ -8,6 +8,18 @@ called to turn text into vectors.
 `ingest.py` reads a OneNote section exported as `.mht`, finds each page (title, date, text),
 splits the pages into chunks of about 300-500 words, and saves them to `chunks.json`.
 
+It also cleans up two things before saving:
+
+- **Duplicate pages**: OneNote sometimes exports the same page twice (same title, date and text).
+  Only the first copy is kept.
+- **Passwords**: values written like `Pw: abc`, `pwd=abc`, `/pass=abc`, `PSK: abc`, or `user id=` /
+  `password=` in connection strings become `[REDACTED]`, so they're never saved in `chunks.json` or
+  sent to Foundry. This only catches the "label: value" kind. A password written in a sentence
+  ("the password is abc") is not caught, so check your notes, and move real passwords to a
+  password manager.
+
+The last lines of the output say how many duplicates were skipped and how many values were redacted.
+
 ### Run it on Windows
 
 ```powershell
@@ -42,12 +54,22 @@ Don't send note content.
 saves the vectors it gets back to `vectors.npy`, plus `vectors_index.json` linking each vector to its
 chunk. Run it once, and again whenever you re-run `ingest.py`.
 
-One-time setup: in Foundry, deploy an embedding model (for example `text-embedding-3-small`). Then:
+One-time setup: in Foundry, deploy an embedding model (for example `text-embedding-3-small`). Open
+the deployment's page: it shows a **Target URI** and a **Key**. Paste both into `.env` (already
+created from `.env.example`; if it's missing, `copy .env.example .env`):
 
 ```powershell
-copy .env.example .env
-notepad .env    # paste your endpoint, key and deployment name
+notepad .env
 ```
+
+```
+AZURE_OPENAI_ENDPOINT=<paste the whole Target URI>
+AZURE_OPENAI_API_KEY=<paste the Key>
+```
+
+The endpoint and deployment name are taken from the Target URI, so that's all. If something's wrong
+(placeholder left in, wrong key, wrong deployment, chat model instead of an embedding model, network
+blocked), `embed.py` stops with a message saying which setting to fix.
 
 ```powershell
 python embed.py --fake   # try the offline stand-in first, no key needed
