@@ -1,0 +1,291 @@
+Content-Type: multipart/related; type="text/html";
+ boundary="===============7886019942341418931=="
+MIME-Version: 1.0
+
+--===============7886019942341418931==
+Content-Type: text/html; charset="utf-8"
+MIME-Version: 1.0
+Content-Transfer-Encoding: quoted-printable
+Content-Location: file:///C:/Users/fake/Engineering.htm
+
+<html xmlns:o=3D"urn:schemas-microsoft-com:office:office"
+xmlns:dt=3D"uuid:C2F41010-65B3-11d1-A29F-00AA00C14882"
+xmlns=3D"http://www.w3.org/TR/REC-html40">
+<head>
+<meta http-equiv=3DContent-Type content=3D"text/html; charset=3Dutf-8">
+<meta name=3DProgId content=3DOneNote.File>
+<meta name=3DGenerator content=3D"Microsoft OneNote 15">
+<link id=3DMain-File rel=3DMain-File href=3D"Engineering.htm">
+<link rel=3DFile-List href=3D"Engineering_files/filelist.xml">
+<title>Engineering</title>
+</head>
+<body lang=3Den-US style=3D'font-family:Calibri;font-size:11.0pt'>
+
+<div style=3D'direction:ltr;margin-top:0in;margin-left:0in;width:6.5in'>
+<div style=3D'direction:ltr;margin-top:0in;margin-left:0in;width:6.5in'>
+<p style=3D'margin:0in;font-family:"Calibri Light";font-size:20.0pt' lang=
+=3Den-US>Deployment runbook - Orders API</p>
+</div>
+<div style=3D'direction:ltr;margin-top:.0423in;margin-left:0in;width:1.6416=
+in'>
+<p style=3D'margin:0in;font-size:10.0pt;color:#767676'><span style=3D'font-=
+family:Calibri'>Monday, March 3, 2025</span></p>
+<p style=3D'margin:0in;font-size:10.0pt;color:#767676'><span style=3D'font-=
+family:Calibri'>9:30 AM</span></p>
+</div>
+<div style=3D'direction:ltr;margin-top:.4in;margin-left:0in;width:6.5in'>
+<p style=3D'margin:0in;font-family:Calibri;font-size:11.0pt'>This page desc=
+ribes how we deploy the Orders API to the staging and production environmen=
+ts. The service runs on Azure App Service with two deployment slots, stagin=
+g and production, and we swap slots instead of deploying straight to produc=
+tion.</p>
+<p style=3D'margin:0in;font-family:Calibri;font-size:11.0pt'>Before you sta=
+rt, make sure the release branch has passed the full CI pipeline, including=
+ the integration tests against the shared test database. If any test is fla=
+ky, rerun it once. If it fails twice, stop and raise it in the team channel=
+.</p>
+<ul type=3Ddisc style=3D'direction:ltr;unicode-bidi:embed;margin-top:0in;ma=
+rgin-bottom:0in'>
+<li style=3D'margin-top:0;margin-bottom:0;vertical-align:middle'><span styl=
+e=3D'font-family:Calibri;font-size:11.0pt'>Check the release notes are writ=
+ten and linked from the ticket.</span></li>
+<li style=3D'margin-top:0;margin-bottom:0;vertical-align:middle'><span styl=
+e=3D'font-family:Calibri;font-size:11.0pt'>Confirm the database migration s=
+cript has been reviewed by a second developer.</span></li>
+<li style=3D'margin-top:0;margin-bottom:0;vertical-align:middle'><span styl=
+e=3D'font-family:Calibri;font-size:11.0pt'>Tell the support team the planne=
+d deployment window at least one day ahead.</span></li>
+<li style=3D'margin-top:0;margin-bottom:0;vertical-align:middle'><span styl=
+e=3D'font-family:Calibri;font-size:11.0pt'>Make sure someone from the on-ca=
+ll rota is available during the deployment.</span></li>
+</ul>
+<p style=3D'margin:0in;font-family:Calibri;font-size:11.0pt'>Step one is to=
+ run the database migration against staging. The migrations are written to =
+be backwards compatible, which means the old version of the code must still=
+ work after the migration runs. We never drop or rename a column in the sam=
+e release that stops using it. Instead we stop using it first, then remove =
+it in a later release once we are sure nothing reads it anymore.</p>
+<p style=3D'margin:0in;font-family:Calibri;font-size:11.0pt'>Step two is to=
+ deploy the build artifact to the staging slot. Use the release pipeline in=
+ Azure DevOps and pick the build number from the CI run you checked earlier=
+. Do not rebuild from source at this point, because a rebuild can pick up a=
+ different version of a dependency and you would be deploying something nob=
+ody tested.</p>
+<p style=3D'margin:0in;font-family:Calibri;font-size:11.0pt'>Step three is =
+the smoke test. Open the staging URL and run the smoke test collection. It =
+creates a test order, reads it back, updates the delivery address and cance=
+ls it. All four calls should return success within two seconds. Also check =
+Application Insights for any new exceptions in the last fifteen minutes.</p>
+<p style=3D'margin:0in;font-family:Calibri;font-size:11.0pt'>Step four is t=
+he slot swap. In the Azure portal, open the App Service, go to Deployment s=
+lots and choose Swap. Source is staging, target is production. The swap war=
+ms up the staging instances before routing traffic, so users should not not=
+ice anything. Watch the live metrics for at least ten minutes after the swa=
+p finishes.</p>
+<p style=3D'margin:0in;font-family:Calibri;font-size:11.0pt'>Rollback is th=
+e same operation in reverse: swap the slots again. Because the old version =
+is still sitting in the staging slot after a swap, rolling back takes about=
+ a minute. This is the main reason we use slots. The database migration doe=
+s not need to be rolled back because it is backwards compatible, as describ=
+ed above.</p>
+<table border=3D1 cellpadding=3D0 cellspacing=3D0 style=3D'direction:ltr;bo=
+rder-collapse:collapse;border-style:solid;border-color:#A3A3A3;border-width=
+:1pt'>
+<tr><td style=3D'border:solid #A3A3A3 1.0pt;vertical-align:top;width:1.6in;=
+padding:2.0pt 3.0pt 2.0pt 3.0pt'><p style=3D'margin:0in;font-family:Calibri=
+;font-size:11.0pt'>Environment</p></td><td style=3D'border:solid #A3A3A3 1.=
+0pt;vertical-align:top;width:1.6in;padding:2.0pt 3.0pt 2.0pt 3.0pt'><p styl=
+e=3D'margin:0in;font-family:Calibri;font-size:11.0pt'>URL</p></td><td style=
+=3D'border:solid #A3A3A3 1.0pt;vertical-align:top;width:1.6in;padding:2.0pt=
+ 3.0pt 2.0pt 3.0pt'><p style=3D'margin:0in;font-family:Calibri;font-size:11=
+.0pt'>Owner</p></td></tr>
+<tr><td style=3D'border:solid #A3A3A3 1.0pt;vertical-align:top;width:1.6in;=
+padding:2.0pt 3.0pt 2.0pt 3.0pt'><p style=3D'margin:0in;font-family:Calibri=
+;font-size:11.0pt'>Staging</p></td><td style=3D'border:solid #A3A3A3 1.0pt;=
+vertical-align:top;width:1.6in;padding:2.0pt 3.0pt 2.0pt 3.0pt'><p style=3D=
+'margin:0in;font-family:Calibri;font-size:11.0pt'>orders-staging.contoso.ex=
+ample</p></td><td style=3D'border:solid #A3A3A3 1.0pt;vertical-align:top;wi=
+dth:1.6in;padding:2.0pt 3.0pt 2.0pt 3.0pt'><p style=3D'margin:0in;font-fami=
+ly:Calibri;font-size:11.0pt'>Platform team</p></td></tr>
+<tr><td style=3D'border:solid #A3A3A3 1.0pt;vertical-align:top;width:1.6in;=
+padding:2.0pt 3.0pt 2.0pt 3.0pt'><p style=3D'margin:0in;font-family:Calibri=
+;font-size:11.0pt'>Production</p></td><td style=3D'border:solid #A3A3A3 1.0=
+pt;vertical-align:top;width:1.6in;padding:2.0pt 3.0pt 2.0pt 3.0pt'><p style=
+=3D'margin:0in;font-family:Calibri;font-size:11.0pt'>orders.contoso.example=
+</p></td><td style=3D'border:solid #A3A3A3 1.0pt;vertical-align:top;width:1=
+.6in;padding:2.0pt 3.0pt 2.0pt 3.0pt'><p style=3D'margin:0in;font-family:Ca=
+libri;font-size:11.0pt'>Platform team</p></td></tr>
+</table>
+<p style=3D'margin:0in;font-family:Calibri;font-size:11.0pt'>Known issues: =
+the first request after a swap sometimes takes four or five seconds because=
+ the connection pool to the database is cold. We have a ticket open to add =
+a warm-up endpoint that the swap can call. Until that is done, it is fine t=
+o ignore a single slow request right after the swap, but anything longer is=
+ worth investigating.</p>
+<p style=3D'margin:0in;font-family:Calibri;font-size:11.0pt'>After the depl=
+oyment, update the ticket with the build number and the time of the swap, p=
+ost a short message in the release channel, and close the change request. I=
+f anything went wrong, even if it was fixed, write two or three lines in th=
+e deployment log page so the next person knows what to look out for.</p>
+</div>
+</div>
+<br clear=3Dall style=3D'page-break-before:always'>
+
+<div style=3D'direction:ltr;margin-top:0in;margin-left:0in;width:6.5in'>
+<div style=3D'direction:ltr;margin-top:0in;margin-left:0in;width:6.5in'>
+<p style=3D'margin:0in;font-family:"Calibri Light";font-size:20.0pt' lang=
+=3Den-US>Onboarding notes for new developers</p>
+</div>
+<div style=3D'direction:ltr;margin-top:.0423in;margin-left:0in;width:1.6416=
+in'>
+<p style=3D'margin:0in;font-size:10.0pt;color:#767676'><span style=3D'font-=
+family:Calibri'>Tuesday, March 11, 2025</span></p>
+<p style=3D'margin:0in;font-size:10.0pt;color:#767676'><span style=3D'font-=
+family:Calibri'>9:30 AM</span></p>
+</div>
+<div style=3D'direction:ltr;margin-top:.4in;margin-left:0in;width:6.5in'>
+<p style=3D'margin:0in;font-family:Calibri;font-size:11.0pt'>Welcome to the=
+ team. These notes cover the first week. Ask questions early; nobody expect=
+s you to know our systems yet, and most of our setup is not obvious.</p>
+<ul type=3Ddisc style=3D'direction:ltr;unicode-bidi:embed;margin-top:0in;ma=
+rgin-bottom:0in'>
+<li style=3D'margin-top:0;margin-bottom:0;vertical-align:middle'><span styl=
+e=3D'font-family:Calibri;font-size:11.0pt'>Day 1: laptop setup, accounts, a=
+nd access to Azure DevOps and the Azure portal.</span></li>
+<li style=3D'margin-top:0;margin-bottom:0;vertical-align:middle'><span styl=
+e=3D'font-family:Calibri;font-size:11.0pt'>Day 2: clone the main repositori=
+es and get the Orders API running locally.</span></li>
+<li style=3D'margin-top:0;margin-bottom:0;vertical-align:middle'><span styl=
+e=3D'font-family:Calibri;font-size:11.0pt'>Day 3: pair with a teammate on a=
+ small bug fix and go through a code review.</span></li>
+<li style=3D'margin-top:0;margin-bottom:0;vertical-align:middle'><span styl=
+e=3D'font-family:Calibri;font-size:11.0pt'>Day 4 and 5: pick up a starter t=
+icket from the board, tagged good-first-issue.</span></li>
+</ul>
+<p style=3D'margin:0in;font-family:Calibri;font-size:11.0pt'>Local developm=
+ent uses Docker Compose to run SQL Server and a fake payment provider. Run =
+docker compose up from the repository root, then start the API from Visual =
+Studio. The seed script creates ten test customers and a few hundred orders=
+.</p>
+<p style=3D'margin:0in;font-family:Calibri;font-size:11.0pt'>Coding standar=
+ds are in the wiki. The short version: write tests for new logic, keep pull=
+ requests small, and explain the why in the pull request description rather=
+ than the what, since the diff already shows the what.</p>
+</div>
+</div>
+<br clear=3Dall style=3D'page-break-before:always'>
+
+<div style=3D'direction:ltr;margin-top:0in;margin-left:0in;width:6.5in'>
+<div style=3D'direction:ltr;margin-top:0in;margin-left:0in;width:6.5in'>
+<p style=3D'margin:0in;font-family:"Calibri Light";font-size:20.0pt' lang=
+=3Den-US>Meeting notes - API versioning discussion</p>
+</div>
+<div style=3D'direction:ltr;margin-top:.0423in;margin-left:0in;width:1.6416=
+in'>
+<p style=3D'margin:0in;font-size:10.0pt;color:#767676'><span style=3D'font-=
+family:Calibri'>Thursday, April 3, 2025</span></p>
+<p style=3D'margin:0in;font-size:10.0pt;color:#767676'><span style=3D'font-=
+family:Calibri'>9:30 AM</span></p>
+</div>
+<div style=3D'direction:ltr;margin-top:.4in;margin-left:0in;width:6.5in'>
+<p style=3D'margin:0in;font-family:Calibri;font-size:11.0pt'>Attendees: Ale=
+x, Priya, Sam, Jordan. Goal: agree how we version public APIs before the mo=
+bile team starts using the Orders API directly.</p>
+<p style=3D'margin:0in;font-family:Calibri;font-size:11.0pt'>Options discus=
+sed were URL versioning (/v1/orders), a header (api-version), and query str=
+ing versioning. Priya pointed out that Azure API Management supports all th=
+ree, so tooling is not the deciding factor.</p>
+<p style=3D'margin:0in;font-family:Calibri;font-size:11.0pt'>Decision: use =
+URL versioning for major versions only. Minor, backwards compatible changes=
+ do not get a new version. A major version stays supported for at least twe=
+lve months after the next one is released.</p>
+<ul type=3Ddisc style=3D'direction:ltr;unicode-bidi:embed;margin-top:0in;ma=
+rgin-bottom:0in'>
+<li style=3D'margin-top:0;margin-bottom:0;vertical-align:middle'><span styl=
+e=3D'font-family:Calibri;font-size:11.0pt'>Action: Sam to write the version=
+ing guideline page in the wiki.</span></li>
+<li style=3D'margin-top:0;margin-bottom:0;vertical-align:middle'><span styl=
+e=3D'font-family:Calibri;font-size:11.0pt'>Action: Jordan to add /v1 routes=
+ to the Orders API, keeping old routes as aliases.</span></li>
+<li style=3D'margin-top:0;margin-bottom:0;vertical-align:middle'><span styl=
+e=3D'font-family:Calibri;font-size:11.0pt'>Action: Alex to tell the mobile =
+team about the decision.</span></li>
+</ul>
+</div>
+</div>
+<br clear=3Dall style=3D'page-break-before:always'>
+
+<div style=3D'direction:ltr;margin-top:0in;margin-left:0in;width:6.5in'>
+<div style=3D'direction:ltr;margin-top:0in;margin-left:0in;width:6.5in'>
+<p style=3D'margin:0in;font-family:"Calibri Light";font-size:20.0pt' lang=
+=3Den-US>Troubleshooting: payment webhook failures</p>
+</div>
+<div style=3D'direction:ltr;margin-top:.0423in;margin-left:0in;width:1.6416=
+in'>
+<p style=3D'margin:0in;font-size:10.0pt;color:#767676'><span style=3D'font-=
+family:Calibri'>Wednesday, May 14, 2025</span></p>
+<p style=3D'margin:0in;font-size:10.0pt;color:#767676'><span style=3D'font-=
+family:Calibri'>9:30 AM</span></p>
+</div>
+<div style=3D'direction:ltr;margin-top:.4in;margin-left:0in;width:6.5in'>
+<p style=3D'margin:0in;font-family:Calibri;font-size:11.0pt'>Symptom: order=
+s stay in PendingPayment even though the customer was charged. This almost =
+always means the payment provider&#x27;s webhook did not reach us, or reach=
+ed us and failed validation.</p>
+<p style=3D'margin:0in;font-family:Calibri;font-size:11.0pt'>First check th=
+e webhook log table for the order id. If there is no row, the call never ar=
+rived: check the provider dashboard for delivery errors and confirm the web=
+hook URL has not changed. If there is a row with status Rejected, the signa=
+ture check failed, which usually means the signing secret was rotated on on=
+e side only.</p>
+<p style=3D'margin:0in;font-family:Calibri;font-size:11.0pt'>To fix a singl=
+e stuck order, use the admin tool&#x27;s Reconcile button, which asks the p=
+rovider for the payment status and updates the order. Do not edit the datab=
+ase row by hand, because that skips the events that trigger the confirmatio=
+n email.</p>
+</div>
+</div>
+<br clear=3Dall style=3D'page-break-before:always'>
+
+<div style=3D'direction:ltr;margin-top:0in;margin-left:0in;width:6.5in'>
+<div style=3D'direction:ltr;margin-top:0in;margin-left:0in;width:6.5in'>
+<p style=3D'margin:0in;font-family:"Calibri Light";font-size:20.0pt' lang=
+=3Den-US>Ideas</p>
+</div>
+<div style=3D'direction:ltr;margin-top:.0423in;margin-left:0in;width:1.6416=
+in'>
+<p style=3D'margin:0in;font-size:10.0pt;color:#767676'><span style=3D'font-=
+family:Calibri'>Friday, June 6, 2025</span></p>
+<p style=3D'margin:0in;font-size:10.0pt;color:#767676'><span style=3D'font-=
+family:Calibri'>9:30 AM</span></p>
+</div>
+<div style=3D'direction:ltr;margin-top:.4in;margin-left:0in;width:6.5in'>
+<p style=3D'margin:0in;font-family:Calibri;font-size:11.0pt'>Short page on =
+purpose, to test small pages.</p>
+<ul type=3Ddisc style=3D'direction:ltr;unicode-bidi:embed;margin-top:0in;ma=
+rgin-bottom:0in'>
+<li style=3D'margin-top:0;margin-bottom:0;vertical-align:middle'><span styl=
+e=3D'font-family:Calibri;font-size:11.0pt'>Cache product prices for 60 seco=
+nds.</span></li>
+<li style=3D'margin-top:0;margin-bottom:0;vertical-align:middle'><span styl=
+e=3D'font-family:Calibri;font-size:11.0pt'>Add a dark mode to the admin too=
+l.</span></li>
+</ul>
+</div>
+</div>
+<br clear=3Dall style=3D'page-break-before:always'>
+
+<img width=3D48 height=3D48 src=3D"Engineering_files/image001.png">
+</body>
+</html>
+
+--===============7886019942341418931==
+Content-Type: image/png
+MIME-Version: 1.0
+Content-Transfer-Encoding: base64
+Content-Location: file:///C:/Users/fake/Engineering_files/image001.png
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgAAACAAFUok9dAAAA
+AElFTkSuQmCC
+
+--===============7886019942341418931==--

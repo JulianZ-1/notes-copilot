@@ -1,0 +1,11 @@
+# Output of ingest.py: contains your notes, never commit it
+chunks.json
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Your real OneNote exports: never commit them (the fake sample is fine)
+*.mht
+!sample_data/fake_section.mht
