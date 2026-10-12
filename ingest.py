@@ -26,12 +26,10 @@ from bs4 import BeautifulSoup
 # This makes print() replace them instead of crashing.
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-# A paragraph counts as a page title if its font is at least this big.
-# OneNote writes page titles at 20pt and normal text at 11pt.
-TITLE_MIN_FONT_PT = 18
-
-# OneNote writes the page's date and time under the title in this grey.
-DATE_COLOR = "#767676"
+# OneNote writes the page's date and time under the title in grey. Title font
+# sizes vary between exports, so the date line is what marks a new page.
+DATE_COLORS = ("#767676", "gray", "#666666")
+DATE_PATTERN = re.compile(r"^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),\s")
 
 # The HTML elements we treat as one "block" of text, in document order.
 # <tr> is a table row: we join its cells with " | " so tables stay readable.
@@ -72,17 +70,13 @@ def clean(text):
     return " ".join(text.split())
 
 
-def font_size_pt(element):
-    """Largest font-size (in pt) set on this element or anything inside it."""
-    styles = [element.get("style", "")]
-    styles += [child.get("style", "") for child in element.find_all(style=True)]
-    sizes = re.findall(r"font-size:\s*([\d.]+)pt", " ".join(styles))
-    return max((float(s) for s in sizes), default=0)
-
-
-def is_grey_date(element):
+def is_grey(element):
     styles = element.get("style", "") + " ".join(c.get("style", "") for c in element.find_all(style=True))
-    return DATE_COLOR in styles.lower()
+    return any(color in styles.lower() for color in DATE_COLORS)
+
+
+def is_date_line(element, text):
+    return is_grey(element) and DATE_PATTERN.match(text) is not None
 
 
 def iter_blocks(soup):
@@ -106,15 +100,18 @@ def iter_blocks(soup):
 def split_into_pages(soup, fallback_title):
     """Group the blocks of one HTML document into pages.
 
-    A new page starts at every block whose font is big enough to be a title.
-    The grey date/time lines right after a title are saved as the page date.
-    Returns a list of dicts: {"title", "date", "paragraphs"}.
+    A new page starts at every block that is directly followed by a grey
+    date line. The grey date/time lines right after a title are saved as
+    the page date. Returns a list of dicts: {"title", "date", "paragraphs"}.
     """
+    blocks = list(iter_blocks(soup))
     pages = []
     current = None
 
-    for el, text in iter_blocks(soup):
-        if el.name in ("p", "h1") and font_size_pt(el) >= TITLE_MIN_FONT_PT:
+    for i, (el, text) in enumerate(blocks):
+        next_el, next_text = blocks[i + 1] if i + 1 < len(blocks) else (None, "")
+
+        if next_el is not None and is_date_line(next_el, next_text):
             current = {"title": text, "date": "", "paragraphs": []}
             pages.append(current)
             continue
@@ -124,7 +121,8 @@ def split_into_pages(soup, fallback_title):
             current = {"title": fallback_title, "date": "", "paragraphs": []}
             pages.append(current)
 
-        if not current["paragraphs"] and is_grey_date(el):
+        # Grey lines right after the title (date, then time) become the page date.
+        if not current["paragraphs"] and is_grey(el):
             current["date"] = (current["date"] + " " + text).strip()
         else:
             current["paragraphs"].append(text)
