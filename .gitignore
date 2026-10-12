@@ -9,3 +9,10 @@ __pycache__/
 # Your real OneNote exports: never commit them (the fake sample is fine)
 *.mht
 !sample_data/fake_section.mht
+
+# Output of embed.py: made from your notes, never commit it
+vectors.npy
+vectors_index.json
+
+# Your Foundry key: never commit it (.env.example is the template)
+.env
